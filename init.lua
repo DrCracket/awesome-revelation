@@ -27,7 +27,6 @@ local capi         = {
     awesome        = awesome,
     tag            = tag,
     client         = client,
-    keygrabber     = keygrabber,
     mousegrabber   = mousegrabber,
     mouse          = mouse,
     screen         = screen
@@ -46,6 +45,7 @@ local delayed_call = (type(timer) ~= 'table' and  require("gears.timer").delayed
 local view_only_func
 local toggle_tag_func
 local jump_to_func
+local grabber
 
 
 if type(awful.client.object) == 'table' then
@@ -108,9 +108,9 @@ local revelation = {
 -- Executed when user selects a client from expose view.
 --
 -- @param restore Function to reset the current tags view.
-local function selectfn(_, t, zt, callback)
+local function selectfn(_, t, zt)
     return function(c)
-        revelation.restore(t, zt, callback)
+        revelation.restore(t, zt)
         -- Focus and raise
         --
         if type(delayed_call) == 'function' then
@@ -172,7 +172,6 @@ function revelation.expose(args)
     local rule = args.rule or {}
     local is_excluded = args.is_excluded or revelation.is_excluded
     local curr_tag_only = args.curr_tag_only or revelation.curr_tag_only
-    local callback = args.callback
 
     local t={}
     local zt={}
@@ -204,11 +203,12 @@ function revelation.expose(args)
     end
     -- No need for awesome WM 3.5.6: capi.awesome.emit_signal("refresh")
     --
-    local status, err=pcall(revelation.expose_callback, t, zt, clients, callback)
+    local status, err=pcall(revelation.expose_callback, t, zt, clients) 
 
     --revelation.expose_callback(t, zt)
     if not status then
         debuginfo('Oops!, something is wrong in revelation.expose_callback!')
+        debuginfo(gears.debug.dump_return(err))
 
         if err.msg then 
             debuginfo(err.msg) 
@@ -218,18 +218,18 @@ function revelation.expose(args)
             debuginfo('error code is '.. tostring(err.code)) 
         end
 
-        revelation.restore(t, zt, callback)
+        revelation.restore(t, zt)
 
     end
 end
 
 
-function revelation.restore(t, zt, callback)
+function revelation.restore(t, zt)
     local scr = awful.screen.focused().index
     awful.tag.history.restore(scr)
     t[scr].screen = nil
 
-    capi.keygrabber.stop()
+    awful.keygrabber.stop(grabber)
     capi.mousegrabber.stop()
     
      for _, c in pairs(clients) do
@@ -255,10 +255,6 @@ function revelation.restore(t, zt, callback)
     for char,_ in pairs(hintindex) do
         hintbox[char].visible = false
     end
-
-    if callback then
-      callback()
-    end
 end
 
 local function hintbox_display_toggle(c, show)
@@ -283,7 +279,7 @@ local function hintbox_pos(char)
 end
 
 
-function revelation.expose_callback(t, zt, clientlist, callback)
+function revelation.expose_callback(t, zt, clientlist)
 
     hintindex = {}
     for i,thisclient in pairs(clientlist) do
@@ -300,7 +296,7 @@ function revelation.expose_callback(t, zt, clientlist, callback)
     local zoomedClient = nil
     local key_char_zoomed = nil
 
-    capi.keygrabber.run(function (mod, key, event) 
+    grabber = awful.keygrabber.run(function (mod, key, event) 
         local c
         if event == "release" then return true end
 
@@ -341,7 +337,7 @@ function revelation.expose_callback(t, zt, clientlist, callback)
             --client.focus = hintindex[key]
             --hintindex[key]:raise()
 
-            selectfn(restore,t, zt, callback)(hintindex[key])
+            selectfn(restore,t, zt)(hintindex[key])
 
             for i,j in pairs(hintindex) do
                 hintbox[i].visible = false
@@ -366,7 +362,7 @@ function revelation.expose_callback(t, zt, clientlist, callback)
                 for i,j in pairs(hintindex) do
                     hintbox[i].visible = false
                 end
-                revelation.restore(t, zt, callback)
+                revelation.restore(t, zt)
                 return false
             end
         end
@@ -402,7 +398,7 @@ function revelation.expose_callback(t, zt, clientlist, callback)
         local key_char = awful.util.table.hasitem(hintindex, c) 
         if mouse.buttons[1] == true then
             if c ~= nil then
-                selectfn(restore, t, zt, callback)(c)
+                selectfn(restore, t, zt)(c)
 
                 for i,j in pairs(hintindex) do
                     hintbox[i].visible = false
